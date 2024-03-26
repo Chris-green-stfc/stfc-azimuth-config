@@ -1,4 +1,11 @@
 #####
+# Images configuration
+#####
+community_images_custom_properties:
+  - "hw_scsi_model=virtio-scsi"
+  - "hw_disk_bus=scsi"
+
+#####
 # Configuration for the seed node (HA) or single node
 #####
 
@@ -13,7 +20,7 @@ infra_external_network_id: "5283f642-8bd8-48b6-8608-fa3006ff4539"
 # The fixed floating IP to associate with the machine
 # This IP must be pre-allocated to the project
 # For a single node deployment, this IP should have the wildcard ingress domain assigned to it
-infra_fixed_floatingip: "130.246.215.76"
+infra_fixed_floatingip: "130.246.214.139"
 # OR
 # The name of the floating IP pool to allocate a floating IP from
 #infra_floatingip_pool: "public"
@@ -24,12 +31,12 @@ infra_fixed_floatingip: "130.246.215.76"
 # The image id of an Ubuntu 20.04 image to use for the node
 #   N.B. This is populated automatically using community images by default
 # infra_image_id: "bc31f48a-b79d-4cbe-8481-08717e1e643e"
-infra_image_id: ""
+# infra_image_id: ""
 
 # The id of the flavor to use for the node
 # For a seed node for an HA cluster, 8GB RAM is fine (maybe even 4GB)
 # For a single node deployment, >= 16GB RAM is recommended
-infra_flavor_id: "300f36c7-603d-4c69-80d1-1dc610c309b8"
+infra_flavor_id: "f120e108-7883-4933-bb76-4f88909447f6"  # l6.c4 (4 vCPU, ~15GB RAM, 75GB disk)
 
 # The size in GB for the data volume
 # This will hold all cluster data, including Kubernetes resources, and also PVC data
@@ -41,26 +48,76 @@ infra_data_volume_size: 100
 
 # The Kubernetes version that will be used for the HA cluster
 #   N.B. This is populated automatically using community images by default
-capi_cluster_kubernetes_version: 1.23.8
+# capi_cluster_kubernetes_version: ""
 # capi_cluster_kubernetes_version: 1.28.7
 # The ID of the image that will be used for the nodes of the HA cluster
 #   N.B. This is populated automatically using community images by default
 # capi_cluster_machine_image_id: "<image id>"
 # The name of the flavor to use for control plane nodes
-capi_cluster_control_plane_flavor: "l3.micro"
+capi_cluster_control_plane_flavor: "l6.c4"  # 4 vCPU, ~15GB RAM, 75GB disk
 # The name of the flavor to use for worker nodes
-capi_cluster_worker_flavor: "l3.micro"
+capi_cluster_worker_flavor: "l6.c4"  # 4 vCPU, ~15GB RAM, 75GB disk
 # The number of worker nodes
 capi_cluster_worker_count: 3
 # The fixed floating IP to associate with the load balancer for the ingress controller
 # This IP must be pre-allocated to the project and should have the wildcard ingress domain assigned to it
 capi_cluster_addons_ingress_load_balancer_ip: "130.246.215.76"
 
+#### For the HA cluster ####
+
+# A list of failure domains that should be considered for control plane nodes
+# capi_cluster_control_plane_failure_domains: [ceph]
+# # The failure domain for worker nodes
+# capi_cluster_worker_failure_domain: ceph
+
+# #### For tenant clusters ####
+
+# azimuth_capi_operator_capi_helm_control_plane_failure_domains: [ceph]
+# azimuth_capi_operator_capi_helm_worker_failure_domain: ceph
+
+#-----
+# Use default compute AZ for HA + tenant clusters
+#-----
+capi_cluster_control_plane_omit_failure_domain: true
+capi_cluster_worker_failure_domain: null
+azimuth_capi_operator_capi_helm_control_plane_omit_failure_domain: true
+azimuth_capi_operator_capi_helm_worker_failure_domain: null
+
+#-----
+# Volume AZ for HA + tenant clusters
+#-----
+capi_cluster_addons_csi_cinder_availability_zone: ceph
+azimuth_capi_operator_capi_helm_csi_cinder_default_availability_zone: ceph
+
+#-----
+# Networking for tenant + HA clusters
+#-----
+capi_cluster_pods_cidr: 10.0.0.0/13
+capi_cluster_services_cidr: 10.8.0.0/13
+azimuth_capi_operator_capi_helm_pods_cidr: "{{ capi_cluster_pods_cidr }}"
+azimuth_capi_operator_capi_helm_services_cidr: "{{ capi_cluster_services_cidr }}"
+
+#-----
+# Docker Hub mirror for HA + tenant clusters
+#-----
+capi_cluster_registry_mirrors:
+  docker.io:
+    - https://dockerhub.stfc.ac.uk
+azimuth_capi_operator_capi_helm_registry_mirrors: "{{ capi_cluster_registry_mirrors }}"
+
+
 #####
 # Ingress configuration
 #####
 # The base domain to use for ingress resources
-ingress_base_domain: "dev-apps.cape.stfc.ac.uk"
+# ingress_base_domain: "dev-apps.cape.stfc.ac.uk"
+# Use an SSLIP domain until DNS wildcard record is sorted
+ingress_base_domain: >-
+  apps.{{ capi_cluster_addons_ingress_load_balancer_ip | replace('.', '-') }}.sslip.io
+
+# Disable TLS until a wildcard cert (or internet facing for LE) is sorted
+# WARNING - DO NOT GO INTO PRODUCTION WITH THIS
+ingress_tls_enabled: false
 
 # Indicates if cert-manager should be enabled
 # Currently, TLS is enabled for ingress iff cert-manager is enabled
@@ -83,8 +140,9 @@ azimuth_clusters_enabled: yes
 azimuth_current_cloud_name: my-cloud
 # The label for the current cloud
 azimuth_current_cloud_label: My Cloud
-# The auth URL for the target OpenStack cloud
-azimuth_openstack_auth_url: https://cloud.example.com:5000/v3
+
+# Use the STFC domain for now
+azimuth_openstack_domain: stfc
 
 #####
 # Configuration of authenticators / authentication methods
@@ -106,28 +164,3 @@ azimuth_authenticator_federated_label: "Federated"
 # The provider for the federated authenticator
 # This should correspond to the Keystone federation URL, e.g. <auth url>/auth/OS-FEDERATION/websso/<provider>
 azimuth_authenticator_federated_provider: oidc
-
-#####
-# Configuration for CaaS appliances
-#####
-# If CaaS is enabled and the StackHPC Slurm appliance is enabled (the default), this
-# is the id of a Rocky 8 image that will be used for Slurm clusters
-#   N.B. This is populated automatically using community images by default
-# azimuth_caas_stackhpc_slurm_appliance_image: "<image id>"
-# The name of the flavor to use for login nodes
-azimuth_caas_stackhpc_slurm_appliance_login_flavor_name: "l3.micro"
-# The name of the flavor to use for control nodes
-azimuth_caas_stackhpc_slurm_appliance_control_flavor_name: "l3.micro"
-
-# The ID of the desktop or webconsole image to use for the workstation appliance
-# See https://object.arcus.openstack.hpc.cam.ac.uk/swift/v1/AUTH_f0dc9cb312144d0aa44037c9149d2513/azimuth-images-prerelease/
-#   N.B. This is populated automatically using community images by default
-# azimuth_caas_stackhpc_workstation_image: "<image id>"
-
-# The ID of the repo2docker image to use for the repo2docker appliance
-# See https://object.arcus.openstack.hpc.cam.ac.uk/swift/v1/AUTH_f0dc9cb312144d0aa44037c9149d2513/azimuth-images-prerelease/
-#   N.B. This is populated automatically using community images by default
-# azimuth_caas_stackhpc_repo2docker_image: "<image id>"
-
-community_images: {}
-
