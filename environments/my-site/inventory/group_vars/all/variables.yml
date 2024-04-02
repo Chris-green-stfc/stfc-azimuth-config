@@ -50,7 +50,7 @@ infra_data_volume_size: 100
 #   N.B. This is populated automatically using community images by default
 # capi_cluster_kubernetes_version: ""
 # capi_cluster_kubernetes_version: 1.28.7
-# The ID of the image that will be used for the nodes of the HA cluster
+# The ID of the image that will be used for the nodes of the HA clu3\ster
 #   N.B. This is populated automatically using community images by default
 # capi_cluster_machine_image_id: "<image id>"
 # The name of the flavor to use for control plane nodes
